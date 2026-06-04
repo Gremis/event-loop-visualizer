@@ -171,50 +171,6 @@ Timeout
 
 ---
 
-## 📸 Capturas de Tela
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  JavaScript Event Loop Visualizer                           │
-│  An interactive visual explanation of the Event Loop        │
-└─────────────────────────────────────────────────────────────┘
-
-┌──────────────────┬────────────────────────────────────────┐
-│                  │                                         │
-│  📝 CODE         │      📚 CALL STACK                     │
-│                  │      ┌──────────────┐                  │
-│  Line 1 → active │      │ console.log  │                  │
-│  Line 2          │      └──────────────┘                  │
-│  Line 3          │                                         │
-│  ...             │  ⚡ MICROTASK  🔌 WEB API  📋 CALLBACK │
-│                  │  ┌─────────┐  ┌─────────┐  ┌─────────┐ │
-│                  │  │ Promise │  │setTimeout  │           │
-│                  │  └─────────┘  └─────────┘  └─────────┘ │
-│                  │                                         │
-│                  │         🎯 EVENT LOOP                   │
-│                  │       (pulsando e girando)             │
-│                  │                                         │
-│                  │      💻 OUTPUT CONSOLE                  │
-│                  │      > Start                            │
-│                  │      > End                              │
-│                  │      > Promise                          │
-│                  │      > Timeout                          │
-└──────────────────┴────────────────────────────────────────┘
-
-📊 TIMELINE
-→ Global execution started
-→ setTimeout moved to Web APIs
-→ Promise callback added to Microtask Queue
-→ Call Stack is empty
-→ Microtask executed before Callback Queue
-→ Execution completed
-
-[Buttons: Run setTimeout | Run Promise | Run Full Demo | Reset]
-[Speed: 0.5x ⚪ 1x ⚪ 3x] [Step: 12] [Phase: Complete]
-```
-
----
-
 ## 🛠️ Tecnologia
 
 - **HTML5** - Estrutura semântica
@@ -238,16 +194,6 @@ Depois de interagir com este visualizador, você entenderá:
 ✅ Como `async/await` funciona internamente  
 ✅ O que significa "non-blocking" em JavaScript  
 ✅ Como otimizar performance com essa compreensão  
-
----
-
-## 🎬 Ideal para
-
-- 📹 **Gravação em Video** - Perfeito para LinkedIn, YouTube, apresentações
-- 👨‍🏫 **Ensino** - Explique o Event Loop para alunos
-- 📚 **Estudo** - Aprenda de forma visual e interativa
-- 💼 **Portfólio** - Demonstre seus conhecimentos de JavaScript
-- 🎓 **Entrevistas Técnicas** - Prepare-se para perguntas sobre Event Loop
 
 ---
 
