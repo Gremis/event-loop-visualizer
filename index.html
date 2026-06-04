@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript Event Loop Visualizer</title>
+    <style>
+        /* ===========================
+           RESET & VARIABLES
+           =========================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-dark: #0a0e27;
+            --secondary-dark: #13152a;
+            --accent-neon: #00d4ff;
+            --accent-purple: #b026ff;
+            --accent-pink: #ff006e;
+            --accent-green: #00ff88;
+            --accent-yellow: #ffb300;
+            --text-primary: #e0e7ff;
+            --text-secondary: #a8aece;
+            --bg-glass: rgba(19, 21, 42, 0.5);
+            --border-glass: rgba(0, 212, 255, 0.1);
+            --glow-blur: 20px;
+            --transition-fast: 0.3s ease-out;
+            --transition-smooth: 0.6s ease-out;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1628 100%);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(0, 212, 255, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(176, 38, 255, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* ===========================
+           LAYOUT
+           =========================== */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-glass);
+            background: rgba(10, 14, 39, 0.8);
+            backdrop-filter: blur(10px);
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, var(--accent-neon), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 4px;
+        }
+
+        .header p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .main-content {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 16px;
+            padding: 16px;
+            overflow: hidden;
+        }
+
+        /* ===========================
+           CONTROLS
+           =========================== */
+        .controls {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 16px;
+            padding: 16px;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, var(--accent-neon), var(--accent-purple));
+            color: var(--primary-dark);
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 212, 255, 0.4);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+        }
+
+        button.tertiary {
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-neon));
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .speed-control label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .speed-control input {
+            width: 80px;
+        }
+
+        input[type="range"] {
+            cursor: pointer;
+            accent-color: var(--accent-neon);
+        }
+
+        .info-display {
+            display: flex;
+            gap: 24px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .info-value {
+            color: var(--accent-neon);
+            font-weight: 600;
+        }
+
+        /* ===========================
+           PANELS
+           =========================== */
+        .panel {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            padding: 16px;
+            overflow: auto;
+            position: relative;
+        }
+
+        .panel-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-neon);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-glass);
+        }
+
+        /* ===========================
+           CODE PANEL
+           =========================== */
+        .code-panel {
+            grid-column: 1;
+            grid-row: 2;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .code-line {
+            padding: 4px 8px;
+            border-left: 3px solid transparent;
+            transition: all var(--transition-fast);
+            color: var(--text-secondary);
+        }
+
+        .code-line.active {
+            background: rgba(0, 212, 255, 0.15);
+            border-left-color: var(--accent-neon);
+            color: var(--accent-neon);
+            font-weight: 600;
+            box-shadow: inset 0 0 12px rgba(0, 212, 255, 0.2);
+        }
+
+        .code-keyword { color: var(--accent-purple); font-weight: 600; }
+        .code-string { color: var(--accent-green); }
+        .code-number { color: var(--accent-yellow); }
+        .code-function { color: var(--accent-neon); }
+
+        /* ===========================
+           VISUALIZATION AREA
+           =========================== */
+        .viz-area {
+            grid-column: 2;
+            grid-row: 2;
+            display: grid;
+            grid-template-rows: 1fr 1fr 1fr;
+            gap: 12px;
+            overflow: hidden;
+        }
+
+        /* ===========================
+           QUEUES & STACKS
+           =========================== */
+        .queue-container {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .queue-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .queue-content {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            gap: 8px;
+            position: relative;
+        }
+
+        /* Task cards */
+        .task-card {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all var(--transition-smooth);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .task-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .task-card > * { position: relative; z-index: 1; }
+
+        .task-card.sync {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.3), rgba(0, 212, 255, 0.1));
+            border: 1px solid rgba(0, 212, 255, 0.5);
+            color: var(--accent-neon);
+            box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+        }
+
+        .task-card.microtask {
+            background: linear-gradient(135deg, rgba(176, 38, 255, 0.3), rgba(176, 38, 255, 0.1));
+            border: 1px solid rgba(176, 38, 255, 0.5);
+            color: #c77dff;
+            box-shadow: 0 0 12px rgba(176, 38, 255, 0.3);
+        }
+
+        .task-card.callback {
+            background: linear-gradient(135deg, rgba(255, 0, 110, 0.3), rgba(255, 0, 110, 0.1));
+            border: 1px solid rgba(255, 0, 110, 0.5);
+            color: var(--accent-pink);
+            box-shadow: 0 0 12px rgba(255, 0, 110, 0.3);
+        }
+
+        .task-card.async {
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.3), rgba(0, 255, 136, 0.1));
+            border: 1px solid rgba(0, 255, 136, 0.5);
+            color: var(--accent-green);
+            box-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
+        }
+
+        .task-card.moving {
+            animation: taskMove 0.8s ease-out;
+        }
+
+        @keyframes taskMove {
+            0% {
+                transform: scale(0.8) translateY(-20px);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 20px currentColor;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .badge {
+            font-size: 9px;
+            padding: 2px 6px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .timer-progress {
+            width: 100%;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin-top: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .timer-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-neon), var(--accent-purple));
+            animation: progress 2s linear;
+        }
+
+        @keyframes progress {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+
+        /* ===========================
+           CENTRAL EVENT LOOP
+           =========================== */
+        .event-loop-center {
+            grid-column: 1;
+            grid-row: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .event-loop-circle {
+            width: 100px;
+            height: 100px;
+            border: 3px solid var(--accent-neon);
+            border-radius: 50%;
+            position: relative;
+            animation: eventLoopPulse 2s ease-in-out infinite;
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.5), inset 0 0 30px rgba(0, 212, 255, 0.2);
+        }
+
+        @keyframes eventLoopPulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 30px rgba(0, 212, 255, 0.5), inset 0 0 30px rgba(0, 212, 255, 0.2);
+            }
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 50px rgba(0, 212, 255, 0.8), inset 0 0 50px rgba(0, 212, 255, 0.4);
+            }
+        }
+
+        .event-loop-circle::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(var(--accent-purple), var(--accent-neon), var(--accent-purple));
+            opacity: 0.3;
+            animation: rotate 3s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .event-loop-text {
+            position: absolute;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--accent-neon);
+            text-align: center;
+            width: 100%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+
+        .event-loop-label {
+            font-size: 9px;
+            color: var(--text-secondary);
+            position: absolute;
+            bottom: -20px;
+            width: 100%;
+            text-align: center;
+        }
+
+        /* ===========================
+           LOGS PANEL
+           =========================== */
+        .logs-panel {
+            grid-column: 1 / -1;
+            max-height: 120px;
+            border-top: 1px solid var(--border-glass);
+            padding: 12px;
+            background: var(--bg-glass);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        .logs-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 11px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            max-height: 100%;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            padding: 4px 8px;
+            border-left: 2px solid var(--accent-neon);
+            color: var(--text-secondary);
+            animation: slideInLog 0.3s ease-out;
+        }
+
+        @keyframes slideInLog {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .log-entry.important {
+            background: rgba(0, 212, 255, 0.1);
+            color: var(--accent-neon);
+            font-weight: 600;
+        }
+
+        .log-entry.success {
+            color: var(--accent-green);
+            border-left-color: var(--accent-green);
+        }
+
+        /* ===========================
+           OUTPUT CONSOLE
+           =========================== */
+        .output-console {
+            grid-column: 2;
+            grid-row: 3;
+        }
+
+        .output-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .output-line {
+            padding: 6px 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-left: 3px solid var(--accent-neon);
+            border-radius: 3px;
+            color: var(--accent-green);
+            animation: slideInOutput 0.4s ease-out;
+        }
+
+        @keyframes slideInOutput {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* ===========================
+           FOOTER
+           =========================== */
+        .footer {
+            padding: 12px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border-glass);
+            background: rgba(10, 14, 39, 0.8);
+        }
+
+        /* ===========================
+           SCROLLBAR STYLING
+           =========================== */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 212, 255, 0.05);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 212, 255, 0.3);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 212, 255, 0.5);
+        }
+
+        /* ===========================
+           ANIMATIONS
+           =========================== */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animated {
+            animation: fadeIn var(--transition-smooth);
+        }
+
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .code-panel {
+                grid-column: 1;
+            }
+            
+            .viz-area {
+                grid-column: 1;
+            }
+            
+            .event-loop-center {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>JavaScript Event Loop Visualizer</h1>
+            <p>An interactive visual explanation of Call Stack, Web APIs, Microtasks and Callback Queue</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="main-content">
+            <div class="controls">
+                <div class="control-group">
+                    <button id="runSetTimeout">Run setTimeout</button>
+                    <button id="runPromise" class="secondary">Run Promise</button>
+                    <button id="runFetch" class="tertiary">Run Fetch</button>
+                    <button id="runAsync">Run Async/Await</button>
+                    <button id="runFullDemo" class="secondary">Run Full Demo</button>
+                </div>
+                <div class="control-group">
+                    <button id="pauseBtn">⏸ Pause</button>
+                    <button id="resumeBtn">▶ Resume</button>
+                    <button id="resetBtn" class="tertiary">↻ Reset</button>
+                </div>
+                <div class="speed-control">
+                    <label for="speedSlider">Speed:</label>
+                    <input type="range" id="speedSlider" min="0.5" max="3" step="0.5" value="1">
+                    <span id="speedValue">1x</span>
+                </div>
+                <div class="info-display">
+                    <div class="info-item">
+                        <span>Step:</span>
+                        <span class="info-value" id="stepCounter">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Phase:</span>
+                        <span class="info-value" id="phaseLabel">Idle</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main visualization area -->
+            <div style="grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; overflow: hidden;">
+                <!-- Left: Code Panel -->
+                <div class="code-panel panel">
+                    <div class="panel-title">📝 Code</div>
+                    <div id="codeContent">
+                        <div class="code-line">
+                            <span class="code-keyword">console</span>.<span class="code-function">log</span>(<span class="code-string">"Start"</span>);
+                        </div>
+                        <div class="code-line">
+                            <span class="code-keyword">setTimeout</span>(() => {
+                        </div>
+                        <div class="code-line">
+                            &nbsp;&nbsp;<span class="code-keyword">console</span>.<span class="code-function">log</span>(<span class="code-string">"Timeout"</span>);
+                        </div>
+                        <div class="code-line">
+                            }, <span class="code-number">1000</span>);
+                        </div>
+                        <div class="code-line">
+                            <span class="code-keyword">Promise</span>.resolve().then(() => {
+                        </div>
+                        <div class="code-line">
+                            &nbsp;&nbsp;<span class="code-keyword">console</span>.<span class="code-function">log</span>(<span class="code-string">"Promise"</span>);
+                        </div>
+                        <div class="code-line">
+                            });
+                        </div>
+                        <div class="code-line">
+                            <span class="code-keyword">console</span>.<span class="code-function">log</span>(<span class="code-string">"End"</span>);
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Queues and Event Loop -->
+                <div class="viz-area">
+                    <!-- Row 1: Call Stack -->
+                    <div class="queue-container">
+                        <div class="queue-title">📚 Call Stack</div>
+                        <div class="queue-content" id="callStack"></div>
+                    </div>
+
+                    <!-- Row 2: Microtask Queue + Web APIs + Callback Queue -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                        <div class="queue-container">
+                            <div class="queue-title">⚡ Microtask Queue</div>
+                            <div class="queue-content" id="microtaskQueue"></div>
+                        </div>
+                        <div class="queue-container">
+                            <div class="queue-title">🔌 Web APIs</div>
+                            <div class="queue-content" id="webApis"></div>
+                        </div>
+                        <div class="queue-container">
+                            <div class="queue-title">📋 Callback Queue</div>
+                            <div class="queue-content" id="callbackQueue"></div>
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Event Loop + Output -->
+                    <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 12px;">
+                        <div class="event-loop-center">
+                            <div class="event-loop-circle">
+                                <div class="event-loop-text">EVENT<br>LOOP</div>
+                                <div class="event-loop-label" id="eventLoopStatus">Waiting</div>
+                            </div>
+                        </div>
+                        <div class="panel output-console">
+                            <div class="panel-title">💻 Output</div>
+                            <div class="output-container" id="outputConsole"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Panel -->
+            <div class="logs-panel">
+                <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-neon);">📊 Timeline</div>
+                </div>
+                <div class="logs-container" id="logsContainer"></div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            Built with HTML, CSS and Vanilla JavaScript
+        </div>
+    </div>
+
+    <script>
+        // ===========================
+        // STATE MANAGEMENT
+        // ===========================
+        const state = {
+            isRunning: false,
+            isPaused: false,
+            speed: 1,
+            step: 0,
+            phase: 'idle',
+            currentExample: null,
+            callStack: [],
+            microtaskQueue: [],
+            callbackQueue: [],
+            webApis: [],
+            output: [],
+            logs: [],
+            codeLineIndex: -1,
+        };
+
+        // ===========================
+        // DOM REFERENCES
+        // ===========================
+        const elements = {
+            callStack: document.getElementById('callStack'),
+            microtaskQueue: document.getElementById('microtaskQueue'),
+            callbackQueue: document.getElementById('callbackQueue'),
+            webApis: document.getElementById('webApis'),
+            outputConsole: document.getElementById('outputConsole'),
+            logsContainer: document.getElementById('logsContainer'),
+            codeContent: document.getElementById('codeContent'),
+            stepCounter: document.getElementById('stepCounter'),
+            phaseLabel: document.getElementById('phaseLabel'),
+            speedSlider: document.getElementById('speedSlider'),
+            speedValue: document.getElementById('speedValue'),
+            eventLoopStatus: document.getElementById('eventLoopStatus'),
+            pauseBtn: document.getElementById('pauseBtn'),
+            resumeBtn: document.getElementById('resumeBtn'),
+        };
+
+        // ===========================
+        // ANIMATION TIMING
+        // ===========================
+        const getAnimationDelay = (factor = 1) => {
+            return (600 / state.speed) * factor;
+        };
+
+        // ===========================
+        // UI UPDATES
+        // ===========================
+        function updateUI() {
+            elements.stepCounter.textContent = state.step;
+            elements.phaseLabel.textContent = state.phase.charAt(0).toUpperCase() + state.phase.slice(1);
+        }
+
+        function addLog(message, isImportant = false, isSuccess = false) {
+            state.logs.push(message);
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            if (isImportant) logEntry.classList.add('important');
+            if (isSuccess) logEntry.classList.add('success');
+            logEntry.textContent = `→ ${message}`;
+            elements.logsContainer.appendChild(logEntry);
+            elements.logsContainer.scrollTop = elements.logsContainer.scrollHeight;
+        }
+
+        function addOutput(message) {
+            state.output.push(message);
+            const outputLine = document.createElement('div');
+            outputLine.className = 'output-line';
+            outputLine.textContent = `> ${message}`;
+            elements.outputConsole.appendChild(outputLine);
+            elements.outputConsole.parentElement.scrollTop = 9999;
+        }
+
+        function reset() {
+            state.isRunning = false;
+            state.isPaused = false;
+            state.step = 0;
+            state.phase = 'idle';
+            state.callStack = [];
+            state.microtaskQueue = [];
+            state.callbackQueue = [];
+            state.webApis = [];
+            state.output = [];
+            state.logs = [];
+            state.codeLineIndex = -1;
+
+            elements.callStack.innerHTML = '';
+            elements.microtaskQueue.innerHTML = '';
+            elements.callbackQueue.innerHTML = '';
+            elements.webApis.innerHTML = '';
+            elements.outputConsole.innerHTML = '';
+            elements.logsContainer.innerHTML = '';
+
+            // Reset code highlighting
+            document.querySelectorAll('.code-line').forEach(line => {
+                line.classList.remove('active');
+            });
+
+            updateUI();
+            elements.pauseBtn.disabled = true;
+            elements.resumeBtn.disabled = true;
+        }
+
+        // ===========================
+        // TASK RENDERING
+        // ===========================
+        function renderTask(queue, container, type = 'sync') {
+            const taskCard = document.createElement('div');
+            taskCard.className = `task-card ${type} moving`;
+            
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = type.toUpperCase();
+            
+            const label = document.createElement('span');
+            label.textContent = queue.label;
+            
+            taskCard.appendChild(badge);
+            taskCard.appendChild(label);
+            
+            container.appendChild(taskCard);
+            
+            return taskCard;
+        }
+
+        function removeTaskCard(element) {
+            setTimeout(() => {
+                element.style.animation = 'taskMove 0.4s ease-in reverse';
+                setTimeout(() => element.remove(), 400);
+            }, 100);
+        }
+
+        // ===========================
+        // CODE HIGHLIGHTING
+        // ===========================
+        function highlightCodeLine(index) {
+            document.querySelectorAll('.code-line').forEach(line => {
+                line.classList.remove('active');
+            });
+            if (index >= 0 && index < document.querySelectorAll('.code-line').length) {
+                document.querySelectorAll('.code-line')[index].classList.add('active');
+            }
+        }
+
+        // ===========================
+        // ANIMATION SEQUENCE BUILDER
+        // ===========================
+        async function sleep(ms) {
+            if (state.isPaused) {
+                await new Promise(resolve => {
+                    const checkPaused = setInterval(() => {
+                        if (!state.isPaused) {
+                            clearInterval(checkPaused);
+                            resolve();
+                        }
+                    }, 100);
+                });
+            }
+            return new Promise(resolve => setTimeout(resolve, ms / state.speed));
+        }
+
+        async function pushToStack(taskLabel, type = 'sync') {
+            if (!state.isRunning) return;
+            state.step++;
+            state.phase = 'execution';
+            
+            const task = { label: taskLabel, type };
+            state.callStack.push(task);
+            renderTask(task, elements.callStack, type);
+            
+            addLog(`${taskLabel} pushed to Call Stack`);
+            updateUI();
+            await sleep(getAnimationDelay());
+        }
+
+        async function popFromStack() {
+            if (!state.isRunning || state.callStack.length === 0) return;
+            state.step++;
+            
+            const task = state.callStack.pop();
+            const taskCard = elements.callStack.lastChild;
+            if (taskCard) removeTaskCard(taskCard);
+            
+            addLog(`${task.label} popped from Call Stack`);
+            updateUI();
+            await sleep(getAnimationDelay());
+        }
+
+        async function addToWebApi(taskLabel) {
+            if (!state.isRunning) return;
+            state.step++;
+            
+            const task = { label: taskLabel, type: 'async' };
+            state.webApis.push(task);
+            renderTask(task, elements.webApis, 'async');
+            
+            addLog(`${taskLabel} moved to Web APIs`);
+            updateUI();
+            await sleep(getAnimationDelay());
+        }
+
+        async function removeFromWebApi() {
+            if (!state.isRunning || state.webApis.length === 0) return;
+            state.step++;
+            
+            const task = state.webApis.shift();
+            const taskCard = elements.webApis.firstChild;
+            if (taskCard) removeTaskCard(taskCard);
+            
+            addLog(`${task.label} completed in Web APIs`);
+            updateUI();
+            await sleep(getAnimationDelay());
+        }
+
+        async function addToMicrotaskQueue(taskLabel) {
+            if (!state.isRunning) return;
+            state.step++;
+            
+            const task = { label: taskLabel, type: 'microtask' };
+            state.microtaskQueue.push(task);
+            renderTask(task, elements.microtaskQueue, 'microtask');
+            
+            addLog(`${taskLabel} added to Microtask Queue`);
+            updateUI();
+            await sleep(getAnimationDelay());
+        }
+
+        async function addToCallbackQueue(taskLabel) {
+            if (!state.isRunning) return;
+            state.step++;
+            
+            const task = { label: taskLabel, type: 'callback' };
+            state.callbackQueue.push(task);
+            renderTask(task, elements.callbackQueue, 'callback');
+            
+            addLog(`${taskLabel} added to Callback Queue`);
+            updateUI();
+            await sleep(getAnimationDelay());
+        }
+
+        async function executeFromMicrotaskQueue() {
+            if (!state.isRunning || state.microtaskQueue.length === 0) return;
+            state.step++;
+            state.phase = 'microtask';
+            
+            const task = state.microtaskQueue.shift();
+            const taskCard = elements.microtaskQueue.firstChild;
+            if (taskCard) removeTaskCard(taskCard);
+            
+            await pushToStack(`${task.label} (microtask)`, 'microtask');
+            addOutput(task.label.replace('then()', ''));
+            
+            addLog(`Microtask executed: ${task.label}`, true, true);
+            await popFromStack();
+            updateUI();
+            await sleep(getAnimationDelay());
+        }
+
+        async function executeFromCallbackQueue() {
+            if (!state.isRunning || state.callbackQueue.length === 0) return;
+            state.step++;
+            state.phase = 'callback';
+            
+            const task = state.callbackQueue.shift();
+            const taskCard = elements.callbackQueue.firstChild;
+            if (taskCard) removeTaskCard(taskCard);
+            
+            await pushToStack(`${task.label} (callback)`, 'callback');
+            addOutput(task.label.replace('callback', '').trim());
+            
+            addLog(`Callback executed: ${task.label}`, true, true);
+            await popFromStack();
+            updateUI();
+            await sleep(getAnimationDelay());
+        }
+
+        async function eventLoopCheck() {
+            if (!state.isRunning) return;
+            state.step++;
+            state.phase = 'event-loop';
+            
+            if (state.callStack.length === 0) {
+                if (state.microtaskQueue.length > 0) {
+                    addLog('Event Loop: Call Stack empty → Draining Microtasks', true);
+                    while (state.microtaskQueue.length > 0 && state.isRunning) {
+                        await executeFromMicrotaskQueue();
+                    }
+                } else if (state.callbackQueue.length > 0) {
+                    addLog('Event Loop: All Microtasks done → Executing Callback', true);
+                    await executeFromCallbackQueue();
+                } else {
+                    addLog('Event Loop: All queues empty', true);
+                }
+            }
+            updateUI();
+            await sleep(getAnimationDelay(0.5));
+        }
+
+        // ===========================
+        // DEMO SEQUENCES
+        // ===========================
+        async function runSetTimeoutExample() {
+            reset();
+            state.isRunning = true;
+            elements.pauseBtn.disabled = false;
+            
+            addLog('Starting setTimeout example', true);
+            
+            // console.log("Start")
+            highlightCodeLine(0);
+            await pushToStack('console.log()');
+            addOutput('Start');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // setTimeout(...)
+            highlightCodeLine(1);
+            await pushToStack('setTimeout()');
+            await addToWebApi('setTimeout callback');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // console.log("End")
+            highlightCodeLine(7);
+            await pushToStack('console.log()');
+            addOutput('End');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // Wait for setTimeout
+            addLog('Waiting for timer...', true);
+            await sleep(1500);
+            await removeFromWebApi();
+            await addToCallbackQueue('setTimeout callback');
+            
+            await eventLoopCheck();
+            
+            state.isRunning = false;
+            state.phase = 'complete';
+            addLog('Execution complete!', true, true);
+            updateUI();
+            elements.pauseBtn.disabled = true;
+        }
+
+        async function runPromiseExample() {
+            reset();
+            state.isRunning = true;
+            elements.pauseBtn.disabled = false;
+            
+            addLog('Starting Promise example', true);
+            
+            // console.log("Start")
+            highlightCodeLine(0);
+            await pushToStack('console.log()');
+            addOutput('Start');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // Promise.resolve().then()
+            highlightCodeLine(4);
+            await pushToStack('Promise.resolve()');
+            await addToMicrotaskQueue('Promise.then()');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // console.log("End")
+            highlightCodeLine(7);
+            await pushToStack('console.log()');
+            addOutput('End');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // Promise callback executes BEFORE setTimeout
+            addLog('Microtasks execute before callbacks!', true);
+            await executeFromMicrotaskQueue();
+            
+            state.isRunning = false;
+            state.phase = 'complete';
+            addLog('Execution complete!', true, true);
+            updateUI();
+            elements.pauseBtn.disabled = true;
+        }
+
+        async function runFullDemo() {
+            reset();
+            state.isRunning = true;
+            elements.pauseBtn.disabled = false;
+            
+            addLog('Starting full demo with setTimeout AND Promise', true);
+            
+            // console.log("Start")
+            highlightCodeLine(0);
+            await pushToStack('console.log()');
+            addOutput('Start');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // setTimeout(...)
+            highlightCodeLine(1);
+            await pushToStack('setTimeout()');
+            await addToWebApi('setTimeout callback');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // Promise.resolve().then()
+            highlightCodeLine(4);
+            await pushToStack('Promise.resolve()');
+            await addToMicrotaskQueue('Promise.then()');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // console.log("End")
+            highlightCodeLine(7);
+            await pushToStack('console.log()');
+            addOutput('End');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // Drain microtasks
+            while (state.microtaskQueue.length > 0 && state.isRunning) {
+                await executeFromMicrotaskQueue();
+            }
+            
+            // Wait for setTimeout
+            addLog('Waiting for timer...', true);
+            await sleep(1500);
+            await removeFromWebApi();
+            await addToCallbackQueue('setTimeout callback');
+            
+            await eventLoopCheck();
+            
+            state.isRunning = false;
+            state.phase = 'complete';
+            addLog('Execution complete! Output order: Start → End → Promise → Timeout', true, true);
+            updateUI();
+            elements.pauseBtn.disabled = true;
+        }
+
+        async function runAsyncAwaitExample() {
+            reset();
+            state.isRunning = true;
+            elements.pauseBtn.disabled = false;
+            
+            addLog('Starting async/await example', true);
+            
+            highlightCodeLine(0);
+            await pushToStack('console.log()');
+            addOutput('Start');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // Async function
+            highlightCodeLine(1);
+            await pushToStack('asyncFunction()');
+            await pushToStack('console.log()');
+            addOutput('Inside async');
+            await popFromStack();
+            await addToMicrotaskQueue('await continuation');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // After asyncFunction
+            highlightCodeLine(7);
+            await pushToStack('console.log()');
+            addOutput('End');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // Microtask executes
+            while (state.microtaskQueue.length > 0 && state.isRunning) {
+                await executeFromMicrotaskQueue();
+            }
+            
+            state.isRunning = false;
+            state.phase = 'complete';
+            addLog('Async/await execution complete!', true, true);
+            updateUI();
+            elements.pauseBtn.disabled = true;
+        }
+
+        // ===========================
+        // EVENT LISTENERS
+        // ===========================
+        document.getElementById('runSetTimeout').addEventListener('click', runSetTimeoutExample);
+        document.getElementById('runPromise').addEventListener('click', runPromiseExample);
+        document.getElementById('runAsync').addEventListener('click', runAsyncAwaitExample);
+        document.getElementById('runFullDemo').addEventListener('click', runFullDemo);
+        document.getElementById('resetBtn').addEventListener('click', reset);
+
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            state.isPaused = true;
+            elements.pauseBtn.disabled = true;
+            elements.resumeBtn.disabled = false;
+        });
+
+        document.getElementById('resumeBtn').addEventListener('click', () => {
+            state.isPaused = false;
+            elements.pauseBtn.disabled = false;
+            elements.resumeBtn.disabled = true;
+        });
+
+        document.getElementById('speedSlider').addEventListener('change', (e) => {
+            state.speed = parseFloat(e.target.value);
+            elements.speedValue.textContent = `${state.speed}x`;
+        });
+
+        // Add missing fetch demo button functionality
+        document.getElementById('runFetch').addEventListener('click', async () => {
+            reset();
+            state.isRunning = true;
+            elements.pauseBtn.disabled = false;
+            
+            addLog('Starting fetch example (simulated)', true);
+            
+            highlightCodeLine(0);
+            await pushToStack('console.log()');
+            addOutput('Start');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            highlightCodeLine(1);
+            await pushToStack('fetch()');
+            await addToWebApi('fetch request');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            highlightCodeLine(4);
+            await pushToStack('Promise.resolve()');
+            await addToMicrotaskQueue('fetch.then()');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            highlightCodeLine(7);
+            await pushToStack('console.log()');
+            addOutput('End');
+            await popFromStack();
+            
+            await eventLoopCheck();
+            
+            // Microtasks first
+            while (state.microtaskQueue.length > 0 && state.isRunning) {
+                await executeFromMicrotaskQueue();
+            }
+            
+            addLog('Simulating network response...', true);
+            await sleep(1000);
+            await removeFromWebApi();
+            await addToMicrotaskQueue('fetch response handler');
+            
+            await eventLoopCheck();
+            
+            while (state.microtaskQueue.length > 0 && state.isRunning) {
+                await executeFromMicrotaskQueue();
+            }
+            
+            state.isRunning = false;
+            state.phase = 'complete';
+            addLog('Fetch simulation complete!', true, true);
+            updateUI();
+            elements.pauseBtn.disabled = true;
+        });
+
+        // Initialize
+        reset();
+    </script>
+</body>
+</html>
